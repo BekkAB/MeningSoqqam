@@ -1,3 +1,4 @@
+𝐁𝐞𝐤𝐳𝐨𝐝, [22.10.2025 13:16]
 import os
 import json
 import datetime
@@ -110,9 +111,10 @@ async def callback(update: Update, context: CallbackContext):
         text = format_yillik(data, year)
         await query.edit_message_text(text)
         return
-        
+
+𝐁𝐞𝐤𝐳𝐨𝐝, [22.10.2025 13:16]
 income, expense, balance, details = hisobla(data, start, end)
-msg = f"{title}\n\n💵 Daromad: {income:,}\n💸 Xarajat: {expense:,}\n💰 Balans: {balance:,}\n"
+    msg = f"{title}\n\n💵 Daromad: {income:,}\n💸 Xarajat: {expense:,}\n💰 Balans: {balance:,}\n"
     if details:
         msg += "\nEng ko‘p xarajatlar:\n"
         top = sorted(details.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -169,6 +171,4 @@ def main():
     app.run_polling()
 
 if name == "main":
-
     main()
-

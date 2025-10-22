@@ -112,7 +112,7 @@ async def callback(update: Update, context: CallbackContext):
         return
         
 income, expense, balance, details = hisobla(data, start, end)
-    msg = f"{title}\n\n💵 Daromad: {income:,}\n💸 Xarajat: {expense:,}\n💰 Balans: {balance:,}\n"
+msg = f"{title}\n\n💵 Daromad: {income:,}\n💸 Xarajat: {expense:,}\n💰 Balans: {balance:,}\n"
     if details:
         msg += "\nEng ko‘p xarajatlar:\n"
         top = sorted(details.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -171,3 +171,4 @@ def main():
 if name == "main":
 
     main()
+

@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: meningsoqqam
+    env: python
+    runtime: python311
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py

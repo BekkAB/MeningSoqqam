@@ -17,7 +17,7 @@ if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
         json.dump({}, f)
 
-# 📦 Load/Save data
+# 📦 JSON data
 def load_data():
     with open(DATA_FILE, "r") as f:
         return json.load(f)
@@ -26,7 +26,7 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# 💰 Handle income/expense messages
+# 💰 Income / Expense
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != CHAT_ID:
         return
@@ -62,7 +62,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_data(data)
 
-# 📊 Report command
+# 📊 Hisobot
 async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📅 Bugungi", callback_data="hisobot_bugun")],
@@ -71,7 +71,7 @@ async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("Hisobot turini tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# 🔍 Calculate report
+# 🔍 Hisoblash
 def hisobla(data, start_date=None, end_date=None):
     income, expense = 0, 0
     details = {}
@@ -88,15 +88,19 @@ def hisobla(data, start_date=None, end_date=None):
     balance = income - expense
     return income, expense, balance, details
 
-# 📘 Format yearly report
+# 📘 Yillik
 def format_yillik(data, year):
     total_income = total_expense = 0
     text = f"📘 MeningSoqqam — {year}-yil hisobot 🧾\n\n"
     for month in range(1, 13):
         start = datetime.date(year, month, 1)
-        end_day = datetime.date(year, month % 12 + 1, 1) - datetime.timedelta(days=1) if month < 12 else datetime.date(year, 12, 31)
-        inc, exp, bal, _ = hisobla(data, start, end_day)
-        if inc == exp == 0: continue
+        if month < 12:
+            end = datetime.date(year, month + 1, 1) - datetime.timedelta(days=1)
+        else:
+            end = datetime.date(year, 12, 31)
+        inc, exp, bal, _ = hisobla(data, start, end)
+        if inc == exp == 0:
+            continue
         total_income += inc
         total_expense += exp
         text += f"🗓 {start.strftime('%B')}\nDaromad: {inc:,}\nXarajat: {exp:,}\nBalans: {bal:,}\n────────────────────\n"
@@ -104,7 +108,7 @@ def format_yillik(data, year):
     text += f"\n📘 Umumiy {year}-yil natijasi:\n💵 Daromad: {total_income:,}\n💸 Xarajat: {total_expense:,}\n💰 Sof balans: {total_balance:,}\n"
     return text
 
-# 📆 Callback query
+# 📆 Callback
 async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -133,7 +137,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"- {name}: {val:,}\n"
     await query.edit_message_text(msg)
 
-# 🕒 Scheduled reports
+# 🕒 Scheduled
 async def kunlik_hisobot(app):
     data = load_data()
     today = datetime.date.today()
@@ -149,8 +153,8 @@ async def oylik_hisobot(app):
     msg = f"🗓 Oylik hisobot ({today.strftime('%B %Y')})\n💵 Daromad: {inc:,}\n💸 Xarajat: {exp:,}\n💰 Balans: {bal:,}"
     await app.bot.send_message(chat_id=CHAT_ID, text=msg)
 
-# 🚀 Start bot
-def start_bot():
+# 🚀 Asosiy funksiya
+async def main():
     print("✅ MeningSoqqam ishga tushdi...")
 
     app = ApplicationBuilder().token(TOKEN).build()
@@ -158,14 +162,13 @@ def start_bot():
     app.add_handler(CommandHandler("hisobot", hisobot))
     app.add_handler(CallbackQueryHandler(callback))
 
-    # Scheduler
+    # Scheduler — event loop ichida ishlaydi
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
     scheduler.add_job(lambda: asyncio.create_task(kunlik_hisobot(app)), "cron", hour=22, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(oylik_hisobot(app)), "cron", day=1, hour=0, minute=0)
     scheduler.start()
 
-    # Run bot polling (Render-da forever loop shart emas)
-    app.run_polling(stop_signals=None)
+    await app.run_polling(stop_signals=None)
 
 if __name__ == "__main__":
-    start_bot()
+    asyncio.run(main())

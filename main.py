@@ -14,7 +14,7 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
-# 🔹 Environment variables
+# 🔹 Load environment variables
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID"))
@@ -24,7 +24,7 @@ if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
         json.dump({}, f)
 
-# 📦 Data read/write
+# 📦 Read/write JSON
 def load_data():
     with open(DATA_FILE, "r") as f:
         return json.load(f)
@@ -33,7 +33,7 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# 💰 Handle messages (+income, -expense)
+# 💰 Handle messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != CHAT_ID:
         return
@@ -69,7 +69,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_data(data)
 
-# 📊 Hisobot menu
+# 📊 Report menu
 async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📅 Bugungi", callback_data="hisobot_bugun")],
@@ -84,10 +84,8 @@ def hisobla(data, start_date=None, end_date=None):
     details = {}
     for date_str, records in data.items():
         d = datetime.date.fromisoformat(date_str)
-        if start_date and d < start_date:
-            continue
-        if end_date and d > end_date:
-            continue
+        if start_date and d < start_date: continue
+        if end_date and d > end_date: continue
         for r in records:
             if r["type"] == "income":
                 income += r["amount"]
@@ -105,8 +103,7 @@ def format_yillik(data, year):
         start = datetime.date(year, month, 1)
         end_day = datetime.date(year, month % 12 + 1, 1) - datetime.timedelta(days=1) if month < 12 else datetime.date(year, 12, 31)
         inc, exp, bal, _ = hisobla(data, start, end_day)
-        if inc == exp == 0:
-            continue
+        if inc == exp == 0: continue
         total_income += inc
         total_expense += exp
         text += f"🗓 {start.strftime('%B')}\nDaromad: {inc:,}\nXarajat: {exp:,}\nBalans: {bal:,}\n────────────────────\n"
@@ -159,7 +156,7 @@ async def oylik_hisobot(app):
     msg = f"🗓 Oylik hisobot ({today.strftime('%B %Y')})\n💵 Daromad: {inc:,}\n💸 Xarajat: {exp:,}\n💰 Balans: {bal:,}"
     await app.bot.send_message(chat_id=CHAT_ID, text=msg)
 
-# 🚀 Main function
+# 🚀 Main
 async def main():
     print("✅ MeningSoqqam ishga tushdi...")
 
@@ -177,10 +174,7 @@ async def main():
 
     await app.run_polling(stop_signals=None)
 
-# 🔹 Run without asyncio.run() conflict
+# 🔹 Start bot
 if __name__ == "__main__":
-    try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
-    except RuntimeError:
-        asyncio.get_event_loop().create_task(main())
+    asyncio.get_event_loop().create_task(main())
+    asyncio.get_event_loop().run_forever()

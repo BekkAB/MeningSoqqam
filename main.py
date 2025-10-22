@@ -3,18 +3,11 @@ import json
 import datetime
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    CallbackQueryHandler,
-    ContextTypes
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
-# 🔹 Load environment variables
+# 🔹 Load .env
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID"))
@@ -24,7 +17,7 @@ if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
         json.dump({}, f)
 
-# 📦 Read/write JSON
+# 📦 Load/Save data
 def load_data():
     with open(DATA_FILE, "r") as f:
         return json.load(f)
@@ -33,7 +26,7 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# 💰 Handle messages
+# 💰 Handle income/expense messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != CHAT_ID:
         return
@@ -69,7 +62,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_data(data)
 
-# 📊 Report menu
+# 📊 Report command
 async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📅 Bugungi", callback_data="hisobot_bugun")],
@@ -171,10 +164,8 @@ def start_bot():
     scheduler.add_job(lambda: asyncio.create_task(oylik_hisobot(app)), "cron", day=1, hour=0, minute=0)
     scheduler.start()
 
-    # Run bot
-    asyncio.get_event_loop().create_task(app.run_polling(stop_signals=None))
+    # Run bot polling (Render-da forever loop shart emas)
+    app.run_polling(stop_signals=None)
 
-# 🔹 Main
 if __name__ == "__main__":
     start_bot()
-    asyncio.get_event_loop().run_forever()

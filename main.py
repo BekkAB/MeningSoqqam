@@ -156,12 +156,11 @@ async def oylik_hisobot(app):
     msg = f"🗓 Oylik hisobot ({today.strftime('%B %Y')})\n💵 Daromad: {inc:,}\n💸 Xarajat: {exp:,}\n💰 Balans: {bal:,}"
     await app.bot.send_message(chat_id=CHAT_ID, text=msg)
 
-# 🚀 Main
-async def main():
+# 🚀 Start bot
+def start_bot():
     print("✅ MeningSoqqam ishga tushdi...")
 
     app = ApplicationBuilder().token(TOKEN).build()
-
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CommandHandler("hisobot", hisobot))
     app.add_handler(CallbackQueryHandler(callback))
@@ -172,9 +171,10 @@ async def main():
     scheduler.add_job(lambda: asyncio.create_task(oylik_hisobot(app)), "cron", day=1, hour=0, minute=0)
     scheduler.start()
 
-    await app.run_polling(stop_signals=None)
+    # Run bot
+    asyncio.get_event_loop().create_task(app.run_polling(stop_signals=None))
 
-# 🔹 Start bot
+# 🔹 Main
 if __name__ == "__main__":
-    asyncio.get_event_loop().create_task(main())
+    start_bot()
     asyncio.get_event_loop().run_forever()

@@ -1,11 +1,9 @@
-𝐁𝐞𝐤𝐳𝐨𝐝, [22.10.2025 13:16]
 import os
 import json
 import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,7 +26,7 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 # 💰 Yozuv qo'shish
-async def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != int(CHAT_ID):
         return
     text = update.message.text.strip()
@@ -64,7 +62,7 @@ async def handle_message(update: Update, context: CallbackContext):
     save_data(data)
 
 # 📊 Hisobot menyusi
-async def hisobot(update: Update, context: CallbackContext):
+async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📅 Bugungi", callback_data="hisobot_bugun")],
         [InlineKeyboardButton("🗓 Oylik", callback_data="hisobot_oy")],
@@ -91,7 +89,7 @@ def hisobla(data, start_date=None, end_date=None):
     return income, expense, balance, details
 
 # 📆 Callback (bugun/oy/yil)
-async def callback(update: Update, context: CallbackContext):
+async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = load_data()
@@ -107,13 +105,11 @@ async def callback(update: Update, context: CallbackContext):
         title = f"🗓 Oylik hisobot ({today.strftime('%B %Y')})"
     else:
         year = today.year
-        title = f"📘 Yillik hisobot ({year})"
         text = format_yillik(data, year)
         await query.edit_message_text(text)
         return
 
-𝐁𝐞𝐤𝐳𝐨𝐝, [22.10.2025 13:16]
-income, expense, balance, details = hisobla(data, start, end)
+    income, expense, balance, details = hisobla(data, start, end)
     msg = f"{title}\n\n💵 Daromad: {income:,}\n💸 Xarajat: {expense:,}\n💰 Balans: {balance:,}\n"
     if details:
         msg += "\nEng ko‘p xarajatlar:\n"
@@ -156,19 +152,19 @@ async def oylik_hisobot(app):
 
 # 🚀 Start
 def main():
-    app = Application.builder().token(TOKEN).build()
+    app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CommandHandler("hisobot", hisobot))
     app.add_handler(CallbackQueryHandler(callback))
 
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
-    scheduler.add_job(lambda: kunlik_hisobot(app), "cron", hour=22, minute=0)
-    scheduler.add_job(lambda: oylik_hisobot(app), "cron", day=1, hour=0, minute=0)
+    scheduler.add_job(kunlik_hisobot, "cron", hour=22, minute=0, args=[app])
+    scheduler.add_job(oylik_hisobot, "cron", day=1, hour=0, minute=0, args=[app])
     scheduler.start()
 
     print("✅ MeningSoqqam ishga tushdi...")
     app.run_polling()
 
-if name == "main":
+if __name__ == "__main__":
     main()

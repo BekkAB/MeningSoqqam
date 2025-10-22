@@ -1,16 +1,13 @@
-import os
-import json
-import datetime
 import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import os
 from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime
 
-# 🔹 Load .env
 load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = int(os.getenv("CHAT_ID"))
+TOKEN = os.getenv("TOKEN")
 
 DATA_FILE = "data.json"
 if not os.path.exists(DATA_FILE):
@@ -172,3 +169,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

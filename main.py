@@ -1,178 +1,119 @@
-import asyncio
 import os
-import json
-from datetime import datetime, date, timedelta
-from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
-)
-from apscheduler.schedulers.background import BackgroundScheduler
+import sqlite3
+from datetime import datetime, timedelta
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# 🌿 ENV yuklash
-load_dotenv()
-TOKEN = os.getenv("TOKEN")
-CHAT_ID = int(os.getenv("CHAT_ID"))
+DB_FILE = "finance.db"
 
-DATA_FILE = "data.json"
-if not os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "w") as f:
-        json.dump({}, f)
+# === DATABASE SETUP ===
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            type TEXT,
+            amount REAL,
+            note TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-# 📦 JSON data
-def load_data():
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+def add_transaction(t_type, amount, note):
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("INSERT INTO transactions (date, type, amount, note) VALUES (?, ?, ?, ?)",
+                (datetime.now().strftime("%Y-%m-%d"), t_type, amount, note))
+    conn.commit()
+    conn.close()
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+def get_summary(days=1):
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    cur.execute("SELECT type, SUM(amount) FROM transactions WHERE date >= ? GROUP BY type", (start_date,))
+    data = cur.fetchall()
+    conn.close()
+    return data
 
-# 💰 Income / Expense
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.id != CHAT_ID:
+# === COMMANDS ===
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "💰 Salom! Men sizning kirim-chiqim hisob botingizman.\n\n"
+        "Buyruqlar:\n"
+        "/kirim 100000 ish haqi\n"
+        "/chiqim 50000 non\n"
+        "/bugun — bugungi hisobot\n"
+        "/balans — umumiy balans"
+    )
+
+async def kirim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 1:
+        await update.message.reply_text("Masalan: /kirim 100000 ish haqi")
         return
+    amount = float(context.args[0])
+    note = " ".join(context.args[1:]) if len(context.args) > 1 else ""
+    add_transaction("kirim", amount, note)
+    await update.message.reply_text(f"✅ {amount:.0f} so‘m kirim qo‘shildi. {note}")
 
-    text = update.message.text.strip()
-    if not text:
+async def chiqim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 1:
+        await update.message.reply_text("Masalan: /chiqim 50000 choy")
         return
+    amount = float(context.args[0])
+    note = " ".join(context.args[1:]) if len(context.args) > 1 else ""
+    add_transaction("chiqim", amount, note)
+    await update.message.reply_text(f"💸 {amount:.0f} so‘m chiqim yozildi. {note}")
 
-    data = load_data()
-    today = str(date.today())
-    if today not in data:
-        data[today] = []
+async def bugun(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = get_summary(days=1)
+    kirim_sum = sum(a for t, a in data if t == "kirim")
+    chiqim_sum = sum(a for t, a in data if t == "chiqim")
+    balance = kirim_sum - chiqim_sum
+    await update.message.reply_text(
+        f"📅 Bugungi hisobot:\n"
+        f"Kirim: {kirim_sum:.0f} so‘m\n"
+        f"Chiqim: {chiqim_sum:.0f} so‘m\n"
+        f"Balans: {balance:.0f} so‘m"
+    )
 
-    if text.startswith("+"):
-        try:
-            parts = text[1:].strip().split(" ", 1)
-            amount = int(parts[0])
-            desc = parts[1] if len(parts) > 1 else "daromad"
-            data[today].append({"type": "income", "amount": amount, "desc": desc})
-            await update.message.reply_text(f"✅ {amount} so‘m daromad qo‘shildi ({desc})")
-        except:
-            await update.message.reply_text("❗ Format: +summa izoh")
-    elif text.startswith("-"):
-        try:
-            parts = text[1:].strip().split(" ", 1)
-            amount = int(parts[0])
-            desc = parts[1] if len(parts) > 1 else "xarajat"
-            data[today].append({"type": "expense", "amount": amount, "desc": desc})
-            await update.message.reply_text(f"💸 {amount} so‘m xarajat qo‘shildi ({desc})")
-        except:
-            await update.message.reply_text("❗ Format: -summa izoh")
-    else:
-        await update.message.reply_text("💡 Misol: +4500000 oylik yoki -25000 bozor")
-        return
+async def balans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT type, SUM(amount) FROM transactions GROUP BY type")
+    data = cur.fetchall()
+    conn.close()
+    kirim_sum = sum(a for t, a in data if t == "kirim")
+    chiqim_sum = sum(a for t, a in data if t == "chiqim")
+    balance = kirim_sum - chiqim_sum
+    await update.message.reply_text(
+        f"💰 Umumiy balans:\n"
+        f"Kirim: {kirim_sum:.0f}\n"
+        f"Chiqim: {chiqim_sum:.0f}\n"
+        f"Balans: {balance:.0f}"
+    )
 
-    save_data(data)
-
-# 📊 Hisobot
-async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("📅 Bugungi", callback_data="hisobot_bugun")],
-        [InlineKeyboardButton("🗓 Oylik", callback_data="hisobot_oy")],
-        [InlineKeyboardButton("📘 Yillik", callback_data="hisobot_yil")],
-    ]
-    await update.message.reply_text("Hisobot turini tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-# 🔍 Hisoblash
-def hisobla(data, start_date=None, end_date=None):
-    income, expense = 0, 0
-    details = {}
-    for date_str, records in data.items():
-        d = date.fromisoformat(date_str)
-        if start_date and d < start_date: continue
-        if end_date and d > end_date: continue
-        for r in records:
-            if r["type"] == "income":
-                income += r["amount"]
-            else:
-                expense += r["amount"]
-                details[r["desc"]] = details.get(r["desc"], 0) + r["amount"]
-    balance = income - expense
-    return income, expense, balance, details
-
-# 📘 Yillik
-def format_yillik(data, year):
-    total_income = total_expense = 0
-    text = f"📘 MeningSoqqam — {year}-yil hisobot 🧾\n\n"
-    for month in range(1, 13):
-        start = date(year, month, 1)
-        if month < 12:
-            end = date(year, month + 1, 1) - timedelta(days=1)
-        else:
-            end = date(year, 12, 31)
-        inc, exp, bal, _ = hisobla(data, start, end)
-        if inc == exp == 0:
-            continue
-        total_income += inc
-        total_expense += exp
-        text += f"🗓 {start.strftime('%B')}\nDaromad: {inc:,}\nXarajat: {exp:,}\nBalans: {bal:,}\n────────────────────\n"
-    total_balance = total_income - total_expense
-    text += f"\n📘 Umumiy {year}-yil natijasi:\n💵 Daromad: {total_income:,}\n💸 Xarajat: {total_expense:,}\n💰 Sof balans: {total_balance:,}\n"
-    return text
-
-# 📆 Callback
-async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = load_data()
-    today = date.today()
-
-    if query.data == "hisobot_bugun":
-        start = end = today
-        title = f"📅 Bugungi hisobot ({today})"
-    elif query.data == "hisobot_oy":
-        start = today.replace(day=1)
-        end = today
-        title = f"🗓 Oylik hisobot ({today.strftime('%B %Y')})"
-    else:
-        year = today.year
-        text = format_yillik(data, year)
-        await query.edit_message_text(text)
-        return
-
-    income, expense, balance, details = hisobla(data, start, end)
-    msg = f"{title}\n\n💵 Daromad: {income:,}\n💸 Xarajat: {expense:,}\n💰 Balans: {balance:,}\n"
-    if details:
-        msg += "\nEng ko‘p xarajatlar:\n"
-        top = sorted(details.items(), key=lambda x: x[1], reverse=True)[:5]
-        for name, val in top:
-            msg += f"- {name}: {val:,}\n"
-    await query.edit_message_text(msg)
-
-# 🕒 Scheduled funksiyalar
-async def kunlik_hisobot(app):
-    data = load_data()
-    today = date.today()
-    inc, exp, bal, _ = hisobla(data, today, today)
-    msg = f"📅 Bugungi hisobot ({today})\n💵 Daromad: {inc:,}\n💸 Xarajat: {exp:,}\n💰 Balans: {bal:,}"
-    await app.bot.send_message(chat_id=CHAT_ID, text=msg)
-
-async def oylik_hisobot(app):
-    data = load_data()
-    today = date.today()
-    start = today.replace(day=1)
-    inc, exp, bal, _ = hisobla(data, start, today)
-    msg = f"🗓 Oylik hisobot ({today.strftime('%B %Y')})\n💵 Daromad: {inc:,}\n💸 Xarajat: {exp:,}\n💰 Balans: {bal:,}"
-    await app.bot.send_message(chat_id=CHAT_ID, text=msg)
-
-# 🚀 Asosiy funksiya
+# === MAIN ===
 async def main():
-    print("✅ MeningSoqqam ishga tushdi...")
+    init_db()
+    TOKEN = os.getenv("TG_BOT_TOKEN")
+    if not TOKEN:
+        raise RuntimeError("TG_BOT_TOKEN o‘rnatilmagan.")
 
     app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(CommandHandler("hisobot", hisobot))
-    app.add_handler(CallbackQueryHandler(callback))
 
-    scheduler = BackgroundScheduler(timezone="Asia/Tashkent")
-    scheduler.add_job(lambda: asyncio.run(kunlik_hisobot(app)), "cron", hour=22, minute=0)
-    scheduler.add_job(lambda: asyncio.run(oylik_hisobot(app)), "cron", day=1, hour=0, minute=0)
-    scheduler.start()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("kirim", kirim))
+    app.add_handler(CommandHandler("chiqim", chiqim))
+    app.add_handler(CommandHandler("bugun", bugun))
+    app.add_handler(CommandHandler("balans", balans))
 
+    print("✅ MeningSoqqam ishga tushdi...")
     await app.run_polling()
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())

@@ -14,17 +14,17 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
-# 🔹 Atrof-muhit o'zgaruvchilarini yuklash
+# 🔹 Environment variables
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+CHAT_ID = int(os.getenv("CHAT_ID"))
 
 DATA_FILE = "data.json"
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
         json.dump({}, f)
 
-# 📦 Ma'lumotlarni o‘qish/yozish
+# 📦 Data read/write
 def load_data():
     with open(DATA_FILE, "r") as f:
         return json.load(f)
@@ -33,9 +33,9 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# 💰 Yozuv qo‘shish
+# 💰 Handle messages (+income, -expense)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.id != int(CHAT_ID):
+    if update.effective_chat.id != CHAT_ID:
         return
     text = update.message.text.strip()
     if not text:
@@ -69,7 +69,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_data(data)
 
-# 📊 Hisobot menyusi
+# 📊 Hisobot menu
 async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📅 Bugungi", callback_data="hisobot_bugun")],
@@ -78,36 +78,32 @@ async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("Hisobot turini tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# 🔍 Hisobot hisoblash
+# 🔍 Calculate report
 def hisobla(data, start_date=None, end_date=None):
     income, expense = 0, 0
     details = {}
     for date_str, records in data.items():
         d = datetime.date.fromisoformat(date_str)
-        if start_date and d < start_date: 
+        if start_date and d < start_date:
             continue
-        if end_date and d > end_date: 
+        if end_date and d > end_date:
             continue
         for r in records:
             if r["type"] == "income":
                 income += r["amount"]
             else:
                 expense += r["amount"]
-                desc = r["desc"]
-                details[desc] = details.get(desc, 0) + r["amount"]
+                details[r["desc"]] = details.get(r["desc"], 0) + r["amount"]
     balance = income - expense
     return income, expense, balance, details
 
-# 📘 Yillik format
+# 📘 Format yearly report
 def format_yillik(data, year):
     total_income = total_expense = 0
     text = f"📘 MeningSoqqam — {year}-yil hisobot 🧾\n\n"
     for month in range(1, 13):
         start = datetime.date(year, month, 1)
-        if month < 12:
-            end_day = (start.replace(month=month + 1) - datetime.timedelta(days=1))
-        else:
-            end_day = datetime.date(year, 12, 31)
+        end_day = datetime.date(year, month % 12 + 1, 1) - datetime.timedelta(days=1) if month < 12 else datetime.date(year, 12, 31)
         inc, exp, bal, _ = hisobla(data, start, end_day)
         if inc == exp == 0:
             continue
@@ -118,7 +114,7 @@ def format_yillik(data, year):
     text += f"\n📘 Umumiy {year}-yil natijasi:\n💵 Daromad: {total_income:,}\n💸 Xarajat: {total_expense:,}\n💰 Sof balans: {total_balance:,}\n"
     return text
 
-# 📆 Callback (bugun/oy/yil)
+# 📆 Callback query
 async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -147,7 +143,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"- {name}: {val:,}\n"
     await query.edit_message_text(msg)
 
-# 🕒 Avtomatik hisobotlar
+# 🕒 Scheduled reports
 async def kunlik_hisobot(app):
     data = load_data()
     today = datetime.date.today()
@@ -163,7 +159,7 @@ async def oylik_hisobot(app):
     msg = f"🗓 Oylik hisobot ({today.strftime('%B %Y')})\n💵 Daromad: {inc:,}\n💸 Xarajat: {exp:,}\n💰 Balans: {bal:,}"
     await app.bot.send_message(chat_id=CHAT_ID, text=msg)
 
-# 🚀 Asosiy funksiya
+# 🚀 Main function
 async def main():
     print("✅ MeningSoqqam ishga tushdi...")
 
@@ -173,7 +169,7 @@ async def main():
     app.add_handler(CommandHandler("hisobot", hisobot))
     app.add_handler(CallbackQueryHandler(callback))
 
-    # Schedulerni to‘g‘ri asyncio loop bilan ishlatamiz
+    # Scheduler
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
     scheduler.add_job(lambda: asyncio.create_task(kunlik_hisobot(app)), "cron", hour=22, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(oylik_hisobot(app)), "cron", day=1, hour=0, minute=0)
@@ -181,5 +177,10 @@ async def main():
 
     await app.run_polling(stop_signals=None)
 
+# 🔹 Run without asyncio.run() conflict
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
+    except RuntimeError:
+        asyncio.get_event_loop().create_task(main())

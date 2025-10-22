@@ -1,7 +1,12 @@
 services:
   - type: web
-    name: meningsoqqam
+    name: MeningSoqqam
     env: python
-    runtime: python311
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
+    envVars:
+      - key: TG_BOT_TOKEN
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.9

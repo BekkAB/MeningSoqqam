@@ -110,6 +110,7 @@ async def callback(update: Update, context: CallbackContext):
         text = format_yillik(data, year)
         await query.edit_message_text(text)
         return
+        
 income, expense, balance, details = hisobla(data, start, end)
     msg = f"{title}\n\n💵 Daromad: {income:,}\n💸 Xarajat: {expense:,}\n💰 Balans: {balance:,}\n"
     if details:
@@ -168,4 +169,5 @@ def main():
     app.run_polling()
 
 if name == "main":
+
     main()

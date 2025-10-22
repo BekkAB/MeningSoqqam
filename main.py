@@ -1,14 +1,19 @@
 import asyncio
 import os
 import json
+from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters
+)
+from apscheduler.schedulers.background import BackgroundScheduler
 
+# 🌿 ENV yuklash
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+CHAT_ID = int(os.getenv("CHAT_ID"))
 
 DATA_FILE = "data.json"
 if not os.path.exists(DATA_FILE):
@@ -28,11 +33,13 @@ def save_data(data):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != CHAT_ID:
         return
+
     text = update.message.text.strip()
     if not text:
         return
+
     data = load_data()
-    today = str(datetime.date.today())
+    today = str(date.today())
     if today not in data:
         data[today] = []
 
@@ -74,7 +81,7 @@ def hisobla(data, start_date=None, end_date=None):
     income, expense = 0, 0
     details = {}
     for date_str, records in data.items():
-        d = datetime.date.fromisoformat(date_str)
+        d = date.fromisoformat(date_str)
         if start_date and d < start_date: continue
         if end_date and d > end_date: continue
         for r in records:
@@ -91,11 +98,11 @@ def format_yillik(data, year):
     total_income = total_expense = 0
     text = f"📘 MeningSoqqam — {year}-yil hisobot 🧾\n\n"
     for month in range(1, 13):
-        start = datetime.date(year, month, 1)
+        start = date(year, month, 1)
         if month < 12:
-            end = datetime.date(year, month + 1, 1) - datetime.timedelta(days=1)
+            end = date(year, month + 1, 1) - timedelta(days=1)
         else:
-            end = datetime.date(year, 12, 31)
+            end = date(year, 12, 31)
         inc, exp, bal, _ = hisobla(data, start, end)
         if inc == exp == 0:
             continue
@@ -111,7 +118,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = load_data()
-    today = datetime.date.today()
+    today = date.today()
 
     if query.data == "hisobot_bugun":
         start = end = today
@@ -135,17 +142,17 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"- {name}: {val:,}\n"
     await query.edit_message_text(msg)
 
-# 🕒 Scheduled
+# 🕒 Scheduled funksiyalar
 async def kunlik_hisobot(app):
     data = load_data()
-    today = datetime.date.today()
+    today = date.today()
     inc, exp, bal, _ = hisobla(data, today, today)
     msg = f"📅 Bugungi hisobot ({today})\n💵 Daromad: {inc:,}\n💸 Xarajat: {exp:,}\n💰 Balans: {bal:,}"
     await app.bot.send_message(chat_id=CHAT_ID, text=msg)
 
 async def oylik_hisobot(app):
     data = load_data()
-    today = datetime.date.today()
+    today = date.today()
     start = today.replace(day=1)
     inc, exp, bal, _ = hisobla(data, start, today)
     msg = f"🗓 Oylik hisobot ({today.strftime('%B %Y')})\n💵 Daromad: {inc:,}\n💸 Xarajat: {exp:,}\n💰 Balans: {bal:,}"
@@ -160,15 +167,12 @@ async def main():
     app.add_handler(CommandHandler("hisobot", hisobot))
     app.add_handler(CallbackQueryHandler(callback))
 
-    # Scheduler — event loop ichida ishlaydi
-    scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
-    scheduler.add_job(lambda: asyncio.create_task(kunlik_hisobot(app)), "cron", hour=22, minute=0)
-    scheduler.add_job(lambda: asyncio.create_task(oylik_hisobot(app)), "cron", day=1, hour=0, minute=0)
+    scheduler = BackgroundScheduler(timezone="Asia/Tashkent")
+    scheduler.add_job(lambda: asyncio.run(kunlik_hisobot(app)), "cron", hour=22, minute=0)
+    scheduler.add_job(lambda: asyncio.run(oylik_hisobot(app)), "cron", day=1, hour=0, minute=0)
     scheduler.start()
 
-    await app.run_polling(stop_signals=None)
+    await app.run_polling()
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
